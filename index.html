@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OceansQR</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script type="text/javascript" src="https://unpkg.com/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        :root {
+            --deep-ocean: #001219;
+            --mid-ocean: #005f73;
+            --cyan: #0a9396;
+            --foam: #94d2bd;
+            --sand: #e9d8a6;
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent: #00b4d8;
+            --font-main: 'Inter', sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-main);
+            background: linear-gradient(135deg, var(--deep-ocean), #002129);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+            padding-bottom: 50px;
+        }
+
+        /* --- TOAST NOTIFICATION (CUSTOM ALERT) --- */
+        #toast {
+            position: fixed;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px); /* Tersembunyi di atas */
+            background: rgba(0, 18, 25, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--accent);
+            color: white;
+            padding: 16px 30px;
+            border-radius: 50px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 9999;
+            opacity: 0;
+            transition: all 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55); /* Animasi memantul */
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            font-size: 15px;
+        }
+
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        
+        .toast-error { border-color: #ff4d4d !important; box-shadow: 0 10px 30px rgba(255, 77, 77, 0.2) !important;}
+        .toast-error #toast-icon { color: #ff4d4d; }
+        .toast-success { border-color: var(--foam) !important; box-shadow: 0 10px 30px rgba(148, 210, 189, 0.2) !important;}
+        .toast-success #toast-icon { color: var(--foam); }
+
+        /* --- ANIMASI OMBAK --- */
+        .waves {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 15vh;
+            min-height: 100px; max-height: 150px; z-index: -1;
+        }
+
+        /* --- HEADER AREA --- */
+        header { margin: 60px 0 40px; text-align: center; z-index: 10; }
+        header h1 {
+            font-size: 42px; font-weight: 700; letter-spacing: -2px;
+            background: linear-gradient(to right, #fff, var(--accent));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        header p { color: var(--foam); font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin-top: 5px; opacity: 0.8;}
+
+        /* --- CONTAINER UTAMA --- */
+        .app-container {
+            width: 95%; max-width: 1200px; display: grid;
+            grid-template-columns: 1fr 400px; gap: 30px; z-index: 10;
+        }
+
+        .glass-card {
+            background: var(--glass); backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border); border-radius: 32px;
+            padding: 40px; box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+            transition: transform 0.4s ease;
+        }
+
+        /* --- KONTROL KIRI --- */
+        h3 { font-size: 18px; margin-bottom: 20px; color: var(--foam); display: flex; align-items: center; gap: 10px; }
+        label { display: block; font-size: 12px; color: rgba(255,255,255,0.6); margin-bottom: 10px; text-transform: uppercase; font-weight: 600;}
+
+        .input-group { margin-bottom: 30px; }
+        textarea, input[type="text"], select {
+            width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border);
+            border-radius: 16px; padding: 18px; color: white; font-family: var(--font-main);
+            font-size: 15px; transition: all 0.3s ease;
+        }
+        textarea:focus, input[type="text"]:focus { outline: none; border-color: var(--accent); background: rgba(0,0,0,0.5); }
+        textarea { height: 120px; resize: none; font-family: monospace; }
+        textarea::placeholder { font-family: var(--font-main); }
+
+        /* --- SHAPE SELECTOR --- */
+        .shape-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; }
+        .shape-opt {
+            background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
+            border-radius: 12px; padding: 10px; cursor: pointer; text-align: center;
+            transition: all 0.2s;
+        }
+        .shape-opt:hover { background: rgba(255,255,255,0.1); border-color: var(--accent); }
+        .shape-opt.active { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 15px rgba(0,180,216,0.4); }
+        .shape-preview { width: 30px; height: 30px; margin: 0 auto 5px; display: block; pointer-events: none;}
+        .shape-opt span { font-size: 10px; font-weight: 600; display: block; pointer-events: none;}
+
+        /* --- LOGO UPLOAD AREA --- */
+        .upload-area {
+            border: 2px dashed var(--glass-border); border-radius: 20px; padding: 20px;
+            text-align: center; cursor: pointer; transition: 0.3s; color: rgba(255,255,255,0.6);
+        }
+        .upload-area:hover { border-color: var(--accent); background: rgba(0, 180, 216, 0.05); color: white;}
+        #logo-preview-box {
+            display: none; align-items: center; gap: 15px; background: rgba(0,0,0,0.2);
+            padding: 10px; border-radius: 12px; margin-top: 10px; border: 1px solid var(--glass-border);
+        }
+        .img-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: white; padding: 2px;}
+        .btn-del { background: rgba(255, 77, 77, 0.1); border: none; color: #ff4d4d; cursor: pointer; font-weight: 600; padding: 8px 12px; border-radius: 8px; transition: 0.2s;}
+        .btn-del:hover { background: #ff4d4d; color: white;}
+
+        /* --- LIVE PREVIEW --- */
+        .preview-sticky { position: sticky; top: 40px; display: flex; flex-direction: column; align-items: center;}
+        #live-canvas {
+            background: white; padding: 20px; border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4); margin-bottom: 25px;
+            transition: 0.3s;
+        }
+        .btn-gen {
+            background: linear-gradient(to right, var(--accent), var(--mid-ocean));
+            color: white; border: none; padding: 20px 40px; border-radius: 18px;
+            font-weight: 700; cursor: pointer; width: 100%; transition: 0.3s;
+            font-size: 16px; box-shadow: 0 10px 20px rgba(0,180,216,0.2);
+        }
+        .btn-gen:hover { transform: translateY(-3px); box-shadow: 0 15px 30px rgba(0,180,216,0.4); }
+
+        /* --- BATCH RESULT AREA --- */
+        .batch-area { grid-column: 1 / -1; margin-top: 20px; display: none; }
+        .grid-preview {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; margin: 30px 0;
+        }
+        .item-card {
+            background: rgba(0,0,0,0.2); border-radius: 20px; padding: 15px;
+            border: 1px solid var(--glass-border); text-align: center;
+        }
+        .item-card canvas { width: 100% !important; height: auto !important; border-radius: 12px; margin-bottom: 12px; background: white; padding: 8px;}
+        .item-card input { font-size: 12px; padding: 10px; text-align: center; background: rgba(255,255,255,0.05);}
+
+        .zip-bar {
+            background: rgba(0, 95, 115, 0.4); padding: 30px; border-radius: 24px;
+            display: flex; align-items: center; justify-content: space-between; gap: 20px;
+            border: 1px solid var(--glass-border);
+        }
+        #btn-zip { background: var(--foam); color: var(--deep-ocean); padding: 16px 32px; border-radius: 14px; font-weight: 800; cursor: pointer; border: none; transition: 0.3s;}
+        #btn-zip:hover { background: white; transform: translateY(-2px);}
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { width: 20px; height: 20px; border: 3px solid rgba(0,18,25,0.3); border-radius: 50%; border-top-color: var(--deep-ocean); animation: spin 0.8s linear infinite; display: none; margin-right: 10px;}
+
+        /* Wave Animation */
+        .parallax > use { animation: move-forever 25s cubic-bezier(.55,.5,.45,.5) infinite; }
+        .parallax > use:nth-child(1) { animation-delay: -2s; animation-duration: 7s; }
+        .parallax > use:nth-child(2) { animation-delay: -3s; animation-duration: 10s; }
+        .parallax > use:nth-child(3) { animation-delay: -4s; animation-duration: 13s; }
+        .parallax > use:nth-child(4) { animation-delay: -5s; animation-duration: 20s; }
+        @keyframes move-forever { 0% { transform: translate3d(-90px,0,0); } 100% { transform: translate3d(85px,0,0); } }
+    </style>
+</head>
+<body>
+
+    <div id="toast">
+        <span id="toast-icon">⚠️</span>
+        <span id="toast-msg">Notifikasi</span>
+    </div>
+
+    <header>
+        <h1>OceansQR</h1>
+        <p>Premium High-Speed Static QR Generator</p>
+    </header>
+
+    <div class="app-container">
+        <div class="glass-card">
+            <div class="input-group">
+                <h3>🌊 Data Source</h3>
+                <label>Daftar Link (Satu baris = Satu QR)</label>
+                <textarea id="linksInput" placeholder="Contoh:&#10;https://google.com&#10;https://instagram.com" oninput="liveUpdate()"></textarea>
+            </div>
+
+            <div class="input-group">
+                <h3>🎨 Visual Style</h3>
+                <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+                    <div style="flex:1">
+                        <label>Warna Pola</label>
+                        <input type="color" id="qrColor" value="#005f73" oninput="liveUpdate()">
+                    </div>
+                    <div style="flex:1">
+                        <label>Warna Background</label>
+                        <input type="color" id="bgColor" value="#ffffff" oninput="liveUpdate()">
+                    </div>
+                </div>
+
+                <label>Bentuk Pola</label>
+                <div class="shape-grid" id="pattern-grid">
+                    <div class="shape-opt active" data-val="dots">
+                        <svg class="shape-preview" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3" fill="currentColor"/><circle cx="18" cy="6" r="3" fill="currentColor"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="18" cy="18" r="3" fill="currentColor"/></svg>
+                        <span>Dots</span>
+                    </div>
+                    <div class="shape-opt" data-val="rounded">
+                        <svg class="shape-preview" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="2" fill="currentColor"/><rect x="14" y="14" width="6" height="6" rx="2" fill="currentColor"/></svg>
+                        <span>Rounded</span>
+                    </div>
+                    <div class="shape-opt" data-val="classy">
+                        <svg class="shape-preview" viewBox="0 0 24 24"><path d="M4 4h6v6H4z M14 14h6v6h-6z" fill="currentColor"/></svg>
+                        <span>Classy</span>
+                    </div>
+                    <div class="shape-opt" data-val="square">
+                        <svg class="shape-preview" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" fill="currentColor"/><rect x="13" y="13" width="7" height="7" fill="currentColor"/></svg>
+                        <span>Square</span>
+                    </div>
+                </div>
+
+                <label style="margin-top: 20px;">Bentuk Sudut</label>
+                <div class="shape-grid" id="corner-grid">
+                    <div class="shape-opt active" data-val="extra-rounded"><span>Extra Rd</span></div>
+                    <div class="shape-opt" data-val="dot"><span>Dot</span></div>
+                    <div class="shape-opt" data-val="square"><span>Square</span></div>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <h3>⚓ Brand Assets</h3>
+                <div class="upload-area" id="drop-zone" onclick="document.getElementById('logoInput').click()">
+                    <span>Pilih atau Drag Logo ke sini</span>
+                </div>
+                <input type="file" id="logoInput" hidden accept="image/*">
+                <div id="logo-preview-box">
+                    <img src="" id="thumb" class="img-thumb">
+                    <span id="logo-name" style="font-size: 12px; flex: 1; word-break: break-all;">logo.png</span>
+                    <button class="btn-del" onclick="removeLogo()">Hapus</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="preview-sticky">
+            <label style="color: var(--foam);">Live Preview</label>
+            <div id="live-canvas"></div>
+            <button class="btn-gen" onclick="processBatch()">
+                <span>Generate & Review All</span>
+            </button>
+        </div>
+
+        <div class="batch-area glass-card" id="batch-section">
+            <h3>📦 Review & Download Batch</h3>
+            <div class="grid-preview" id="grid-preview"></div>
+            
+            <div class="zip-bar">
+                <div style="flex:1">
+                    <label>Nama File ZIP</label>
+                    <input type="text" id="zipName" value="OceansQR_Export">
+                </div>
+                <div style="flex:1">
+                    <label>Resolusi Download</label>
+                    <select id="resSelect">
+                        <option value="1000">HD (1000px)</option>
+                        <option value="2000">Super HD (2000px)</option>
+                    </select>
+                </div>
+                <button id="btn-zip" onclick="downloadZip()">
+                    <div style="display: flex; align-items: center;">
+                        <div class="spinner" id="spinZip"></div>
+                        <span id="btn-zip-text">Download ZIP</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <svg class="waves" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 24 150 28" preserveAspectRatio="none" shape-rendering="auto">
+        <defs><path id="gentle-wave" d="M-160 44c30 0 58-18 88-18s 58 18 88 18 58-18 88-18 58 18 88 18 v44h-352z" /></defs>
+        <g class="parallax">
+            <use xlink:href="#gentle-wave" x="48" y="0" fill="rgba(0,95,115,0.7)" />
+            <use xlink:href="#gentle-wave" x="48" y="3" fill="rgba(10,147,150,0.5)" />
+            <use xlink:href="#gentle-wave" x="48" y="5" fill="rgba(148,210,189,0.3)" />
+            <use xlink:href="#gentle-wave" x="48" y="7" fill="var(--deep-ocean)" />
+        </g>
+    </svg>
+
+    <script>
+        let logoBase64 = null;
+        let selectedPattern = "dots";
+        let selectedCorner = "extra-rounded";
+        let currentLinks = [];
+        let toastTimeout;
+
+        // --- SISTEM NOTIFIKASI KUSTOM ---
+        function showNotification(message, type = "error") {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toast-icon');
+            const msg = document.getElementById('toast-msg');
+
+            msg.innerText = message;
+            
+            if (type === "error") {
+                toast.className = "toast-error";
+                icon.innerText = "⚠️";
+            } else {
+                toast.className = "toast-success";
+                icon.innerText = "✨";
+            }
+
+            // Memicu animasi masuk
+            setTimeout(() => { toast.classList.add('show'); }, 10);
+
+            // Bersihkan timeout lama agar notifikasi tidak hilang mendadak jika di-klik berulang kali
+            clearTimeout(toastTimeout);
+            
+            // Sembunyikan otomatis setelah 3 detik
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // --- SHAPE SELECTORS ---
+        document.querySelectorAll('#pattern-grid .shape-opt').forEach(opt => {
+            opt.onclick = () => {
+                document.querySelector('#pattern-grid .active').classList.remove('active');
+                opt.classList.add('active');
+                selectedPattern = opt.dataset.val;
+                liveUpdate();
+            };
+        });
+
+        document.querySelectorAll('#corner-grid .shape-opt').forEach(opt => {
+            opt.onclick = () => {
+                document.querySelector('#corner-grid .active').classList.remove('active');
+                opt.classList.add('active');
+                selectedCorner = opt.dataset.val;
+                liveUpdate();
+            };
+        });
+
+        // --- UPLOAD LOGO ---
+        document.getElementById('logoInput').onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    logoBase64 = ev.target.result;
+                    document.getElementById('thumb').src = logoBase64;
+                    document.getElementById('logo-name').innerText = file.name;
+                    document.getElementById('logo-preview-box').style.display = 'flex';
+                    liveUpdate();
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
+        function removeLogo() {
+            logoBase64 = null;
+            document.getElementById('logoInput').value = '';
+            document.getElementById('logo-preview-box').style.display = 'none';
+            liveUpdate();
+        }
+
+        // --- LIVE UPDATE (PREVIEW) ---
+        function liveUpdate() {
+            const linkData = document.getElementById('linksInput').value.split('\n')[0] || "OceansQR";
+            const color = document.getElementById('qrColor').value;
+            const bg = document.getElementById('bgColor').value;
+
+            document.getElementById('live-canvas').innerHTML = "";
+            const qr = new QRCodeStyling({
+                width: 250, height: 250, data: linkData, image: logoBase64,
+                dotsOptions: { color: color, type: selectedPattern },
+                cornersSquareOptions: { color: color, type: selectedCorner },
+                backgroundOptions: { color: bg },
+                imageOptions: { margin: 10 }
+            });
+            qr.append(document.getElementById('live-canvas'));
+        }
+
+        // --- BATCH PROCESS ---
+        async function processBatch() {
+            const input = document.getElementById('linksInput').value;
+            currentLinks = input.split('\n').filter(l => l.trim() !== "");
+            
+            // JIKA KOSONG: Sembunyikan review (jika sedang terbuka) dan panggil Notifikasi Kustom
+            if (currentLinks.length === 0) {
+                document.getElementById('batch-section').style.display = 'none';
+                showNotification("Silakan masukkan minimal 1 link terlebih dahulu!", "error");
+                return;
+            }
+
+            // Jika sukses: Tampilkan review
+            document.getElementById('batch-section').style.display = 'block';
+            showNotification(`Berhasil memproses ${currentLinks.length} QR Code!`, "success");
+
+            const grid = document.getElementById('grid-preview');
+            grid.innerHTML = "";
+
+            const color = document.getElementById('qrColor').value;
+            const bg = document.getElementById('bgColor').value;
+
+            currentLinks.forEach((link, i) => {
+                const div = document.createElement('div');
+                div.className = 'item-card';
+                div.innerHTML = `<div id="qr-item-${i}"></div><input type="text" id="name-${i}" value="OceansQR_${i+1}">`;
+                grid.appendChild(div);
+
+                const qr = new QRCodeStyling({
+                    width: 180, height: 180, data: link, image: logoBase64,
+                    dotsOptions: { color: color, type: selectedPattern },
+                    cornersSquareOptions: { color: color, type: selectedCorner },
+                    backgroundOptions: { color: bg },
+                    imageOptions: { margin: 10 }
+                });
+                qr.append(document.getElementById(`qr-item-${i}`));
+            });
+            
+            // Gulir ke bawah dengan mulus
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }
+
+        // --- ZIP DOWNLOAD ---
+        async function downloadZip() {
+            const spin = document.getElementById('spinZip');
+            const btn = document.getElementById('btn-zip');
+            const btnText = document.getElementById('btn-zip-text');
+            
+            spin.style.display = 'inline-block';
+            btnText.innerText = 'Merender HD...';
+            btn.disabled = true;
+
+            const zip = new JSZip();
+            const res = parseInt(document.getElementById('resSelect').value);
+            const color = document.getElementById('qrColor').value;
+            const bg = document.getElementById('bgColor').value;
+
+            for (let i = 0; i < currentLinks.length; i++) {
+                const fileName = document.getElementById(`name-${i}`).value || `QR_${i+1}`;
+                const qr = new QRCodeStyling({
+                    width: res, height: res, data: currentLinks[i], image: logoBase64,
+                    dotsOptions: { color: color, type: selectedPattern },
+                    cornersSquareOptions: { color: color, type: selectedCorner },
+                    backgroundOptions: { color: bg },
+                    imageOptions: { margin: 15 }
+                });
+                const blob = await qr.getRawData("png");
+                zip.file(`${fileName}.png`, blob);
+            }
+
+            zip.generateAsync({type:"blob"}).then(function(content) {
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(content);
+                a.download = document.getElementById('zipName').value + ".zip";
+                a.click();
+                
+                spin.style.display = 'none';
+                btnText.innerText = 'Download ZIP';
+                btn.disabled = false;
+                
+                showNotification("File ZIP berhasil diunduh!", "success");
+            });
+        }
+
+        // Panggil preview awal
+        liveUpdate();
+    </script>
+</body>
+</html>
